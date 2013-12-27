@@ -1,5 +1,4 @@
 
-// [todo] - test
-// [review] - test
-// [fix] - test
-var foo = function() {};
+var foo = function() {
+  alert(1);
+};
