@@ -17,6 +17,10 @@ describe("parseDuration combined segments", () => {
   test("multi-digit segments after the first", () => {
     expect(parseDuration("1h120s")).toBe(3600_000 + 120_000);
   });
+  test("rejects uppercase units", () => {
+    expect(() => parseDuration("1H30M")).toThrow(/invalid duration/);
+    expect(() => parseDuration("1h30M")).toThrow(/invalid duration/);
+  });
   test("rejects trailing garbage instead of dropping it", () => {
     expect(() => parseDuration("1h30")).toThrow(/invalid duration/);
     expect(() => parseDuration("2h junk")).toThrow(/invalid duration/);
