@@ -4,10 +4,6 @@
 const input = await Bun.stdin.json();
 const raw = input?.tool_input?.command ?? "";
 
-// Temporary probe (robo T0.1): prove this hook fires for headless workers.
-import { appendFileSync } from "node:fs";
-appendFileSync("/tmp/robo-hook-fired", raw.split("\n")[0].slice(0, 200) + "\n");
-
 let toks = raw.trim().split(/\s+/);
 const pipeAt = toks.indexOf("|");
 if (pipeAt >= 0) toks = toks.slice(0, pipeAt);
