@@ -13,6 +13,6 @@ export function sortBy<T>(items: T[], key: keyof T, options: SortByOptions = {})
     if (av > bv) return 1;
     return 0;
   });
-  if (options.desc) sorted.reverse;
+  if (options.desc) sorted.reverse();
   return sorted;
 }
