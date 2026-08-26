@@ -9,3 +9,11 @@ export function range(start: number, end: number, step = 1): number[] {
   }
   return out;
 }
+
+/**
+ * Constrain n to the inclusive range [min, max].
+ */
+export function clamp(n: number, min: number, max: number): number {
+  if (min > max) throw new Error(`min must be <= max, got min=${min} max=${max}`);
+  return Math.min(Math.max(n, min), max);
+}
