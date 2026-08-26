@@ -1,0 +1,48 @@
+# Base: oven-sh/bun .github/workflows/close-stale-robobun-prs.yml (fetched 2026-08-26).
+# Deltas (docs/designs/2026-08-26-robo-governance-workflows.md):
+#   1. repo guard added (bun's has none; blocks the cron copy running on forks)
+#   2. selector: --author robobun -> --label agent AND head branch farm/ (no bot
+#      identity before T4; label alone is mutable, branch shape is robo's own)
+#   3. shell hardened: pipefail, materialize the list (a failed gh pr list must
+#      fail the step, not read as "no stale PRs"), candidate count into the step
+#      summary, one failed close does not abort the sweep
+name: Close stale agent PRs
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: "30 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  close-stale-agent-prs:
+    runs-on: ubuntu-latest
+    if: github.repository == 'sorrycc/test'
+    timeout-minutes: 10
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Close stale agent PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          ninety_days_ago=$(date -u -d '90 days ago' +%Y-%m-%dT%H:%M:%SZ)
+
+          nums=$(gh pr list \
+            --label agent \
+            --state open \
+            --json number,updatedAt,headRefName \
+            --limit 1000 \
+            --jq ".[] | select(.updatedAt < \"$ninety_days_ago\") | select(.headRefName | startswith(\"farm/\")) | .number")
+
+          count=$(printf '%s' "$nums" | grep -c . || true)
+          echo "stale candidates: $count" >> "$GITHUB_STEP_SUMMARY"
+
+          for pr_number in $nums; do
+            echo "Closing PR #$pr_number (last updated before $ninety_days_ago)"
+            gh pr close "$pr_number" --comment "Closing this PR because it has been inactive for more than 90 days." \
+              || echo "::warning::close #$pr_number failed"
+          done

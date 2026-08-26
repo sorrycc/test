@@ -1,0 +1,47 @@
+# Base: oven-sh/bun .github/workflows/on-slop.yml (fetched 2026-08-26).
+# Deltas (docs/designs/2026-08-26-robo-governance-workflows.md):
+#   1. repo guard oven-sh/bun -> sorrycc/test
+#   2. skip merged PRs (pulls.update state:closed is a 422 on merged)
+#   3. overwritten body preserves the original description in <details>
+#   4. timeout-minutes: 5
+name: Close AI Slop PRs
+
+permissions:
+  contents: read
+
+on:
+  pull_request_target:
+    types: [labeled]
+
+jobs:
+  on-slop:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.label.name == 'slop' &&
+      github.repository == 'sorrycc/test' &&
+      github.event.pull_request.merged == false
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Comment and close PR
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: 'This PR has been closed because it was flagged as AI slop.\n\nMany AI-generated PRs are fine, but this one was identified as having one or more of the following issues:\n- Fails to verify the problem actually exists\n- Fails to test that the fix works\n- Makes incorrect assumptions about the codebase\n- Submits changes that are incomplete or misleading\n\nIf you believe this was done in error, please leave a comment explaining why.'
+            });
+
+            const original = context.payload.pull_request.body || '(empty)';
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              title: 'ai slop',
+              body: 'This PR has been marked as AI slop and the description has been updated to avoid confusion or misleading reviewers.\n\nMany AI PRs are fine, but sometimes they submit a PR too early, fail to test if the problem is real, fail to reproduce the problem, or fail to test that the problem is fixed. If you think this PR is not AI slop, please leave a comment.\n\n<details><summary>Original description (preserved)</summary>\n\n' + original + '\n\n</details>',
+              state: 'closed'
+            });
