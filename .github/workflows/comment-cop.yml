@@ -22,6 +22,15 @@ name: Comment Cop
 #   8. comment body quotes seed CLAUDE.md rule 4 verbatim (no SAFETY: hint —
 #      the escape hatch is documented in prompts/respond.md, not advertised
 #      to the automated fixer at the violation site)
+#   9. PAT-fallback resolve step: E2E-verified that GITHUB_TOKEN cannot run the
+#      resolveReviewThread mutation ("Resource not accessible by integration",
+#      regardless of pull-requests: write — bun's inline resolve silently fails
+#      the same way). The inline attempt stays (bun parity; no-ops if GitHub
+#      ever allows it); ids that fail are handed to a second step that runs
+#      only when the optional COMMENT_COP_TOKEN secret (fine-grained PAT,
+#      this repo only, Pull requests R/W) is configured. Without it the
+#      workflow degrades gracefully: threads stay open (visible debt), no loop
+#      — respond marks its replied threads settled and never re-burns workers.
 
 on:
   pull_request_target:
@@ -46,6 +55,7 @@ jobs:
       cancel-in-progress: true
     steps:
       - name: Scan diff for added multi-line comments
+        id: scan
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -173,20 +183,27 @@ jobs:
             }
 
             // Auto-resolve threads whose flagged block is gone from the current diff.
+            // GITHUB_TOKEN empirically cannot run this mutation; failed ids go to
+            // the PAT-fallback step below (delta 9).
+            const unresolvedIds = [];
             if (toResolve.length > 0) {
               const mut = `
                 mutation($id: ID!) {
                   resolveReviewThread(input: { threadId: $id }) { thread { id } }
                 }`;
+              let resolved = 0;
               for (const id of toResolve) {
                 try {
                   await github.graphql(mut, { id });
+                  resolved++;
                 } catch (e) {
                   core.warning(`resolveReviewThread failed for ${id}: ${e.message}`);
+                  unresolvedIds.push(id);
                 }
               }
-              core.info(`Resolved ${toResolve.length} stale comment-cop thread(s).`);
+              core.info(`Resolved ${resolved}/${toResolve.length} stale comment-cop thread(s) inline.`);
             }
+            core.setOutput('unresolved_ids', unresolvedIds.join(' '));
 
             // Post new line comments for groups not already flagged.
             const fresh = groups.filter(g => !seenKeys.has(keyFor(g)));
@@ -228,3 +245,32 @@ jobs:
               }
             }
             core.info(`Posted ${posted} review comment(s).`);
+
+      # Delta 9: GITHUB_TOKEN cannot resolveReviewThread. Optional fine-grained
+      # PAT (this repo only, Pull requests R/W) picks up the leftovers. Thread
+      # ids are server-generated GraphQL node ids passed via env — no PR-side
+      # data reaches this step.
+      - name: Resolve stale threads (PAT fallback)
+        if: steps.scan.outputs.unresolved_ids != '' && env.COP_TOKEN != ''
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          COP_TOKEN: ${{ secrets.COMMENT_COP_TOKEN }}
+          UNRESOLVED_IDS: ${{ steps.scan.outputs.unresolved_ids }}
+        with:
+          github-token: ${{ secrets.COMMENT_COP_TOKEN }}
+          script: |
+            const ids = (process.env.UNRESOLVED_IDS || '').split(/\s+/).filter(Boolean);
+            const mut = `
+              mutation($id: ID!) {
+                resolveReviewThread(input: { threadId: $id }) { thread { id } }
+              }`;
+            let resolved = 0;
+            for (const id of ids) {
+              try {
+                await github.graphql(mut, { id });
+                resolved++;
+              } catch (e) {
+                core.warning(`PAT resolveReviewThread failed for ${id}: ${e.message}`);
+              }
+            }
+            core.info(`PAT fallback resolved ${resolved}/${ids.length} thread(s).`);
