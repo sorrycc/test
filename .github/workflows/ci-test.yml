@@ -1,0 +1,45 @@
+# Base: oven-sh/bun .github/workflows/bun-types.yml (fetched 2026-08-27) —
+# the smallest of oven-sh/bun's three `bun test` Actions workflows
+# (bun-types / packages-ci svelte Test step / source-lints); bun's full
+# suite lives on Buildkite (research doc §3.9).
+# Deltas (docs/designs/2026-08-27-robo-ci-status.md):
+#   1. scope: path-filtered types job on push(main) -> whole-repo
+#      `bun test` on push(master) + pull_request (no path filters)
+#   2. ./.github/actions/setup-bun (bun-local composite action) ->
+#      oven-sh/setup-bun pinned @0c5077e51419868618aeaa5fe8019c62421857d6
+#      (v2.2.0); bun-version latest (not canary)
+#   3. install: drop `bun install --cwd test` (no test subpackage here)
+#   4. timeout-minutes 30 -> 10 (pilot-repo scale)
+#   5. renames + env removal: workflow `bun-types` -> `CI tests`; job
+#      `typecheck` ("TypeScript types") -> `test` ("bun test"); step
+#      "Check types" -> "Run tests"; env.BUN_VERSION block removed
+#      (delta 2 pins the setup-bun input directly). "Run tests" is the
+#      classification anchor constant in src/ci.ts — keep both in sync.
+name: CI tests
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    name: bun test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install
+      - name: Run tests
+        run: bun test
