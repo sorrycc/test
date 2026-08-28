@@ -33,3 +33,9 @@ describe("last", () => {
     expect(last([1, undefined])).toBeUndefined();
   });
 });
+
+// E2E fixture (T5 AC4d): deliberately failing assertion pushed by the operator
+// to drive CI red on a file that is inside this PR's diff.
+test("E2E: deliberate failure", () => {
+  expect(last([1, 2, 3])).toBe(99);
+});
