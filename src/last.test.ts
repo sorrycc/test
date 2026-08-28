@@ -33,9 +33,3 @@ describe("last", () => {
     expect(last([1, undefined])).toBeUndefined();
   });
 });
-
-// E2E fixture (T5 AC4d re-run, post-fix): deliberately failing assertion in a
-// file that IS inside this PR's diff — the classifier must now say so.
-test("E2E: deliberate failure (post-fix)", () => {
-  expect(last([1, 2, 3])).toBe(99);
-});
