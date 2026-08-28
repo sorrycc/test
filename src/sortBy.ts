@@ -1,4 +1,4 @@
-export interface SortByOptions {
+interface SortByOptions {
   desc?: boolean;
 }
 
